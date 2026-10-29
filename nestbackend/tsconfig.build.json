@@ -1,0 +1,9 @@
+{
+  /**
+   * Build-time config: same as tsconfig.json but excludes tests and specs so
+   * they never end up in the production `dist/` folder (smaller image, no test
+   * code shipped to production). `nest build` uses this file by default.
+   */
+  "extends": "./tsconfig.json",
+  "exclude": ["node_modules", "test", "dist", "**/*spec.ts"]
+}

@@ -1,0 +1,2364 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/api/v1": {
+      "get": {
+        "operationId": "AppController_getInfo_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "summary": "`@Get()` with no argument = the controller's base path.\n\nThe return value is a plain object. Nest's built-in serialiser turns it\ninto JSON and sets `Content-Type: application/json` - no `res.json()`.\nStatus defaults to 200 for GET and 201 for POST (change it with\n@HttpCode()).",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/api/v1/ping": {
+      "get": {
+        "operationId": "AppController_ping_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "A liveness probe: \"is this process up and able to answer?\"\n\n`@HttpCode(HttpStatus.OK)` is redundant on a GET (200 is already the\ndefault) but it is here to make the decorator visible, and to note the\nrule: a health endpoint must be CHEAP. It must not touch the database,\nbecause a liveness probe that fails when the database is slow will make\nKubernetes restart perfectly healthy pods, turning a database blip into an\napplication outage.\n\nPhase 18 replaces this with @nestjs/terminus and splits liveness (is the\nprocess alive?) from readiness (can it serve traffic right now?) - the\ndistinction that prevents exactly that outage.",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/api/v1/auth/register": {
+      "post": {
+        "operationId": "AuthController_register_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Registered; refresh token set as an httpOnly cookie"
+          },
+          "400": {
+            "description": "Validation failed, or a role was supplied"
+          },
+          "409": {
+            "description": "Email already in use"
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "Register a new account (always creates a MEMBER)",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "operationId": "AuthController_login_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authenticated"
+          },
+          "401": {
+            "description": "Invalid email or password (deliberately indistinguishable)"
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "Exchange credentials for an access token",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "description": "Reads the token from the httpOnly cookie, or from the body for non-browser clients. Reuse of a spent token revokes the entire session family.",
+        "operationId": "AuthController_refresh_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Rotated"
+          },
+          "401": {
+            "description": "Missing, invalid or expired token"
+          },
+          "403": {
+            "description": "Reuse detected - all sessions revoked"
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "Rotate the refresh token",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "operationId": "AuthController_logout_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/logout-all": {
+      "post": {
+        "operationId": "AuthController_logoutAll_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "\"Sign out everywhere\" - what a user clicks after a suspicious-login alert.",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/password": {
+      "post": {
+        "operationId": "AuthController_changePassword_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "operationId": "AuthController_me_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "\"Who am I?\" - the endpoint every frontend calls on boot.\n\nNote it READS FROM THE DATABASE rather than returning the token's claims.\nThe token is a snapshot up to 15 minutes old; this endpoint exists\nprecisely so a client can see the CURRENT name and role. Returning the\ntoken's claims would make a just-promoted user look unpromoted until they\nlogged out - and this is the one route where paying for a query is\nobviously right.",
+        "tags": [
+          "auth"
+        ]
+      },
+      "patch": {
+        "operationId": "AuthController_updateMe_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "SELF-SERVICE PROFILE EDIT.\n\nPHASE 8 moved this out of `PATCH /users/:id`, which is now admin-only. The\nid is not a parameter at all - it comes from the token, so there is no\n\"can this user edit that user?\" question to get wrong. An endpoint that\ncannot express the unsafe case does not need a check for it, which is the\ncheapest kind of authorization there is.",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/users": {
+      "post": {
+        "operationId": "UsersController_create_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "users"
+        ]
+      },
+      "get": {
+        "operationId": "UsersController_findAll_v1",
+        "parameters": [
+          {
+            "name": "x-request-id",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "`@Query()` with no argument binds the WHOLE query string to a DTO, which\nthe global pipe validates and transforms - so `page` really is a `number`\nby the time it arrives.\n\n`@Headers('x-request-id')` still binds a single header. Header names are\ncase-insensitive per the HTTP spec and Node lowercases them, so always match\nin lowercase. Phase 18 replaces this with a proper correlation id generated\nby middleware and attached to every log line.",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/{id}": {
+      "get": {
+        "operationId": "UsersController_findOne_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "`@Param('id', ParseObjectIdPipe)` - a pipe bound to ONE ARGUMENT, the\ntightest of the four scopes.\n\nWithout it, `GET /users/not-an-id` reaches Mongoose, throws a CastError and\nbecomes a 500: a client's typo recorded as a server error. With it, the\nrequest is rejected with 400 before any service code runs.\n\nNote pipes run AFTER guards, so from Phase 8 an unauthenticated caller is\nturned away before we spend anything validating their input.",
+        "tags": [
+          "users"
+        ]
+      },
+      "patch": {
+        "operationId": "UsersController_update_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "users"
+        ]
+      },
+      "delete": {
+        "operationId": "UsersController_remove_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "204: success, and deliberately no body.",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/{id}/role": {
+      "put": {
+        "operationId": "UsersController_setRole_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetUserRoleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "PUT on a SUB-RESOURCE: \"set this user's role to exactly this\" is genuinely\nidempotent, which is what PUT means. Modelling one meaningful state change\nas its own sub-resource beats a generic PATCH, because it documents intent\nand can carry its own authorization rule - Phase 8 puts `@Roles(ADMIN)` on\nthis route alone while leaving profile edits open to the owner.",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/projects": {
+      "post": {
+        "operationId": "ProjectsController_create_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProjectDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "projects"
+        ]
+      },
+      "get": {
+        "operationId": "ProjectsController_findAll_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "===========================================================================\nLIST - SCOPED TO THE CALLER. This is an authorization boundary.\n===========================================================================\nTHE BUG THIS FIXES: `memberId` used to be taken straight from the query\nstring, so omitting it returned EVERY project in the database. A brand-new\nuser with no projects could read the entire organisation's project list.\n\nThat is BROKEN OBJECT-LEVEL AUTHORIZATION (OWASP API1), and the shape of\nthe mistake is worth recognising because it is extremely common:\n\n    GET /projects/:id   was guarded by ProjectAccessGuard   ✓\n    GET /projects       was not guarded at all              ✗\n\nGuarding the item route feels like the job is done - but a collection\nendpoint ENUMERATES the very things the item guard protects. A guard on\n`/:id` stops you reading one project you should not see; it does nothing\nabout a list that hands you all of them.\n\nWHY A GUARD WOULD NOT WORK HERE, and this is the interesting part:\n`ProjectAccessGuard` answers \"may this user touch THIS project?\" and needs\nan id from the route. A list has no id. Collection authorization is not a\nyes/no decision - it is a FILTER, and a filter has to live in the query.\n\nSo the rule is: scope the query by identity from the TOKEN, never from a\nclient-supplied parameter.\n\nINTERVIEW: \"you guarded /:id - why is the list still a problem?\" This is\nthe answer, and it separates people who have thought about authorization\nfrom people who have added a guard.\n===========================================================================",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/v1/projects/{id}": {
+      "get": {
+        "operationId": "ProjectsController_findOne_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "READ requires MEMBERSHIP - any project role will do.\n\nThe guard is applied per route rather than to the class, because `POST\n/projects` and `GET /projects` have no project to check yet.",
+        "tags": [
+          "projects"
+        ]
+      },
+      "patch": {
+        "operationId": "ProjectsController_update_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProjectDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "WRITE requires the MANAGER role WITHIN this project.",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/v1/projects/{id}/archive": {
+      "post": {
+        "operationId": "ProjectsController_archive_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "`@HttpCode(200)` because POST defaults to 201 Created, and this creates\nnothing - it transitions an existing resource. 201 would tell a client (and\na caching proxy) that a new resource exists somewhere, which is untrue.",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/v1/projects/{id}/members": {
+      "post": {
+        "operationId": "ProjectsController_addMember_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddProjectMemberDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/v1/projects/{id}/members/{userId}": {
+      "delete": {
+        "operationId": "ProjectsController_removeMember_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "Two route parameters, bound BY NAME - argument order is irrelevant.\n\nReturns the updated project rather than 204, because the client needs the\nnew member list to re-render. \"204 for every DELETE\" is a convention, not a\nrule; returning the affected resource saves a round trip.",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/v1/notifications": {
+      "get": {
+        "operationId": "NotificationsController_findAll_v1",
+        "parameters": [
+          {
+            "name": "unread",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/unread-count": {
+      "get": {
+        "operationId": "NotificationsController_unreadCount_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/stream": {
+      "get": {
+        "operationId": "NotificationsController_stream$_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "===========================================================================\nSERVER-SENT EVENTS\n===========================================================================\n`@Sse()` makes Nest hold the response open, set\n`Content-Type: text/event-stream`, and write each emitted value in the SSE\nwire format:\n\n    id: 65f1...\n    event: notification\n    data: {\"id\":\"65f1...\",\"title\":\"WEB-142 assigned to you\"}\n    <blank line>\n\nTHE HANDLER RETURNS AN OBSERVABLE THAT NEVER COMPLETES. That is the whole\nreason Nest models responses as Observables rather than Promises (Phase 9)\n- a promise resolves once and the connection would close.\n\n---------------------------------------------------------------------------\nSSE vs WEBSOCKETS - the decision, not the trivia\n---------------------------------------------------------------------------\n                       SSE                      WebSocket\n  Direction            server -> client only    bidirectional\n  Protocol             plain HTTP               upgrade to ws://\n  Reconnection         AUTOMATIC, built in      you write it\n  Proxies / corporate  works (it is just HTTP)  often blocked\n  HTTP/2 multiplexing  yes                      no (own connection)\n  Auth                 awkward - see below      handshake payload\n  Binary               no (text only)           yes\n  Browser conn. limit  6 per origin on HTTP/1.1 not affected\n\nDEFAULT TO SSE for server->client push. It is less code, it survives\ncorporate proxies, and the browser reconnects for you with backoff - which\nis the part people underestimate, because reconnection logic is where\nhand-rolled WebSocket clients go wrong.\n\nREACH FOR WEBSOCKETS when the client must send a stream too: chat,\ncollaborative editing, presence, live cursors. Notifications are one-way,\nso SSE is the right default here - and the gateway in this module exists\nbecause typing indicators and presence are genuinely bidirectional.\n\nTHE HTTP/1.1 SIX-CONNECTION LIMIT is the one real SSE gotcha: a browser\nallows six connections per origin, and an open SSE stream holds one. Open a\nfew tabs and the app stops loading images. HTTP/2 removes it entirely\n(multiplexed), which in practice means \"make sure production is HTTP/2\".\n===========================================================================",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/{id}/read": {
+      "patch": {
+        "operationId": "NotificationsController_markRead_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/read-all": {
+      "post": {
+        "operationId": "NotificationsController_markAllRead_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/scopes": {
+      "get": {
+        "operationId": "ScopesController_describe_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Scopes"
+        ]
+      }
+    },
+    "/api/v1/tasks": {
+      "post": {
+        "operationId": "TasksController_create_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTaskDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "Creating a task requires membership of the project named in the BODY.\n\nProjectAccessGuard looks in params, body and query for a projectId - which\nis what lets one guard serve route shapes as different as\nPOST /tasks { projectId } and GET /projects/:id/....",
+        "tags": [
+          "tasks"
+        ]
+      },
+      "get": {
+        "operationId": "TasksController_findAll_v1",
+        "parameters": [
+          {
+            "name": "projectId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "assigneeId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todo",
+                "in_progress",
+                "in_review",
+                "done"
+              ]
+            }
+          },
+          {
+            "name": "priority",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "urgent"
+              ]
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "name": "overdue",
+            "required": false,
+            "in": "query",
+            "description": "HTTP has no booleans - `?overdue=true` arrives as the STRING \"true\".\n\n`@Type(() => Boolean)` is NOT enough on its own: `Boolean(\"false\")` is\n`true`, because any non-empty string is truthy. That trap catches people\nconstantly, so the conversion is explicit here.",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "===========================================================================\nLIST - SCOPED TO PROJECTS THE CALLER BELONGS TO\n===========================================================================\nTHE BUG THIS FIXES: this endpoint used to pass the query straight to the\nrepository with no membership constraint, so ANY authenticated user could\nread EVERY task in the database. Reproduced before the fix: a brand-new\naccount with zero projects saw another user's three tasks.\n\n`POST /tasks` was already guarded by `ProjectAccessGuard` (it has a\nprojectId in the body to check). `GET /tasks` was not, because a list has\nno id for a guard to check - and that asymmetry is exactly where\ncollection-level authorization gets forgotten.\n\nA LIST IS AUTHORIZED BY FILTERING, NOT BY A YES/NO GUARD. The scope is\nderived from the token and passed to the repository as a constraint that\nthe caller cannot influence.\n===========================================================================",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/api/v1/tasks/stats": {
+      "get": {
+        "operationId": "TasksController_stats_v1",
+        "parameters": [
+          {
+            "name": "projectId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "Declared BEFORE `:id`. See the note above.",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/api/v1/tasks/{id}": {
+      "get": {
+        "operationId": "TasksController_findOne_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "tasks"
+        ]
+      },
+      "patch": {
+        "operationId": "TasksController_update_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTaskDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "tasks"
+        ]
+      },
+      "delete": {
+        "operationId": "TasksController_remove_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "Returns a small body rather than 204, because \"how many comments went with\nit?\" is genuinely useful after a cascading delete - and it is the visible\nevidence that the transaction did both halves.",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/api/v1/tasks/{id}/status": {
+      "patch": {
+        "operationId": "TasksController_changeStatus_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeTaskStatusDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "A dedicated endpoint for the state transition rather than a generic PATCH,\nbecause the transition carries its own rule (the conditional update) and\nwill carry its own authorization rule in Phase 8.",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/api/v1/tasks/{id}/assignee": {
+      "patch": {
+        "operationId": "TasksController_assign_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignTaskDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/api/v1/tasks/{id}/comments": {
+      "get": {
+        "operationId": "TasksController_listComments_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "projectId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "assigneeId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todo",
+                "in_progress",
+                "in_review",
+                "done"
+              ]
+            }
+          },
+          {
+            "name": "priority",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "urgent"
+              ]
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "name": "overdue",
+            "required": false,
+            "in": "query",
+            "description": "HTTP has no booleans - `?overdue=true` arrives as the STRING \"true\".\n\n`@Type(() => Boolean)` is NOT enough on its own: `Boolean(\"false\")` is\n`true`, because any non-empty string is truthy. That trap catches people\nconstantly, so the conversion is explicit here.",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "tasks"
+        ]
+      },
+      "post": {
+        "operationId": "TasksController_addComment_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCommentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/api/v1/tasks/{id}/comments/{commentId}": {
+      "delete": {
+        "operationId": "TasksController_removeComment_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "commentId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "===========================================================================\nDELETE A COMMENT - nested under its task, which is where it belongs\n===========================================================================\nComments are already created and listed under `/tasks/:id/comments`. The\nstandalone `DELETE /comments/:id` was the odd one out, and that anomaly is\nprecisely what made it hard to authorize: a bare comment id gives you no\nroute to the project that owns the membership rule.\n\nNesting it fixes both problems at once:\n  - the URL is consistent with create and list\n  - `TaskAccessGuard` establishes project membership from `:id` BEFORE the\n    handler runs, so the service only has to decide the moderation rule\n\nNOTE it is NOT decorated with `@ProjectRoles(Role.MANAGER)`. Any member may\nreach this route, because the AUTHOR of a comment is usually an ordinary\nmember deleting their own. The finer rule - author, or manager, or global\nadmin - needs the comment itself, so it lives in the service.\n\nThat split is worth naming: a GUARD answers \"may you touch this resource\nat all?\", and the SERVICE answers \"may you do this particular thing to it?\".\nPushing the second into a guard means loading the comment twice.\n===========================================================================",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/api/v1/comments/{id}": {
+      "delete": {
+        "operationId": "CommentsController_remove_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Comments"
+        ]
+      }
+    },
+    "/api/v1/activity-logs": {
+      "get": {
+        "operationId": "ActivityLogsController_findAll_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "activity-logs"
+        ]
+      }
+    },
+    "/health/live": {
+      "get": {
+        "operationId": "HealthController_liveness",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The Health Check is successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    },
+                    "info": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "object",
+                      "example": {},
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The Health Check is not successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "error"
+                    },
+                    "info": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "object",
+                      "example": {
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        },
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Liveness probe: is the process alive? Never touches a dependency.",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "operationId": "HealthController_readiness",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The Health Check is successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    },
+                    "info": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "object",
+                      "example": {},
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The Health Check is not successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "error"
+                    },
+                    "info": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "object",
+                      "example": {
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        },
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Readiness probe: can this instance serve traffic? Checks required dependencies only.",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/health/detail": {
+      "get": {
+        "operationId": "HealthController_detail",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The Health Check is successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    },
+                    "info": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "object",
+                      "example": {},
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The Health Check is not successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "error"
+                    },
+                    "info": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "object",
+                      "example": {
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        },
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Full dependency report, including optional dependencies (Redis).",
+        "tags": [
+          "health"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "TaskFlow API",
+    "description": "A production-style NestJS modular monolith: users, projects, tasks, comments,\nnotifications, background jobs and real-time delivery.\n\n**Authentication.** Every endpoint requires a bearer access token unless it is\nmarked otherwise. Obtain one from `POST /auth/register` or `POST /auth/login`,\nthen use the **Authorize** button above.\n\n**Refresh tokens** are delivered as an httpOnly cookie and are not visible to\nJavaScript - which is deliberate (see the Phase 7 notes in the repository).",
+    "version": "1.0",
+    "contact": {}
+  },
+  "tags": [
+    {
+      "name": "auth",
+      "description": "Registration, login, token refresh and password changes"
+    },
+    {
+      "name": "users",
+      "description": "User administration (admin only)"
+    },
+    {
+      "name": "projects",
+      "description": "Projects and their membership"
+    },
+    {
+      "name": "tasks",
+      "description": "Tasks and comments"
+    },
+    {
+      "name": "notifications",
+      "description": "Notification history and the live SSE stream"
+    },
+    {
+      "name": "health",
+      "description": "Liveness and readiness probes"
+    }
+  ],
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Local development"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "access-token": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http",
+        "description": "The access token returned by /auth/login"
+      }
+    },
+    "schemas": {
+      "RegisterDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "`@Transform` runs BEFORE validation, so the value is normalised first.\n\nTrimming and lowercasing at the edge means the rest of the system never has\nto think about `\" Ada@Example.com \"`. The schema lowercases too - belt and\nbraces, and the schema is what makes the unique index meaningful.",
+            "format": "email"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 80
+          },
+          "password": {
+            "type": "string",
+            "description": "Plaintext, received once over TLS, hashed immediately, never stored or logged."
+          }
+        },
+        "required": [
+          "email",
+          "name",
+          "password"
+        ]
+      },
+      "LoginDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string",
+            "description": "NOTE: no `@IsStrongPassword()` here, deliberately.\n\nLogin validates CREDENTIALS, not password policy. Applying the strength\nrules would (a) reject users whose password predates a policy change, and\n(b) leak the policy to anyone probing the endpoint. Validate the shape\nminimally on login; enforce the policy where the password is SET."
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ]
+      },
+      "RefreshDto": {
+        "type": "object",
+        "properties": {
+          "refreshToken": {
+            "type": "string",
+            "description": "Optional in the body, because the refresh token normally arrives in an\nhttpOnly cookie. The body form exists for non-browser clients (mobile,\nCLI, service-to-service) which have no cookie jar.\n\nSupporting both is the pragmatic choice; the cookie is the SAFER one for\nbrowsers - see the note in auth.controller.ts."
+          }
+        }
+      },
+      "ChangePasswordDto": {
+        "type": "object",
+        "properties": {
+          "currentPassword": {
+            "type": "string"
+          },
+          "newPassword": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "currentPassword",
+          "newPassword"
+        ]
+      },
+      "UpdateMeDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 80
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "CreateUserDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "`@Transform` runs BEFORE validation, so the value is normalised first.\n\nTrimming and lowercasing at the edge means the rest of the system never has\nto think about `\" Ada@Example.com \"`. The schema lowercases too - belt and\nbraces, and the schema is what makes the unique index meaningful.",
+            "format": "email"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 80
+          },
+          "password": {
+            "type": "string",
+            "description": "Plaintext, received once over TLS, hashed immediately, never stored or logged."
+          },
+          "role": {
+            "type": "string",
+            "description": "Optional. Defaults to MEMBER in the service.\n\nSECURITY NOTE: accepting a role from the request body is only safe because\nPhase 8 puts `@Roles(Role.ADMIN)` on this endpoint. Self-registration\n(Phase 7) must IGNORE this field and force MEMBER - otherwise anyone can\nsign up as an admin. That is the single most common privilege-escalation\nbug in tutorial-grade APIs, and `whitelist: true` alone does NOT prevent it,\nbecause `role` IS on the allow-list here. The protection is the guard plus\na separate, narrower DTO for registration.",
+            "enum": [
+              "admin",
+              "manager",
+              "member"
+            ]
+          }
+        },
+        "required": [
+          "email",
+          "name",
+          "password"
+        ]
+      },
+      "UpdateUserDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "`@Transform` runs BEFORE validation, so the value is normalised first.\n\nTrimming and lowercasing at the edge means the rest of the system never has\nto think about `\" Ada@Example.com \"`. The schema lowercases too - belt and\nbraces, and the schema is what makes the unique index meaningful.",
+            "format": "email"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 80
+          },
+          "role": {
+            "description": "Optional. Defaults to MEMBER in the service.\n\nSECURITY NOTE: accepting a role from the request body is only safe because\nPhase 8 puts `@Roles(Role.ADMIN)` on this endpoint. Self-registration\n(Phase 7) must IGNORE this field and force MEMBER - otherwise anyone can\nsign up as an admin. That is the single most common privilege-escalation\nbug in tutorial-grade APIs, and `whitelist: true` alone does NOT prevent it,\nbecause `role` IS on the allow-list here. The protection is the guard plus\na separate, narrower DTO for registration.",
+            "enum": [
+              "admin",
+              "manager",
+              "member"
+            ],
+            "type": "string"
+          }
+        }
+      },
+      "SetUserRoleDto": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "manager",
+              "member"
+            ]
+          }
+        },
+        "required": [
+          "role"
+        ]
+      },
+      "AddProjectMemberDto": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "description": "`@IsMongoId()` rejects a malformed id at the edge with 400, instead of\nletting it reach Mongoose and become a `CastError` -> 500. Same job as\n`ParseObjectIdPipe`, applied to a body field rather than a route param."
+          },
+          "role": {
+            "description": "The member's role WITHIN this project - not their global role.",
+            "enum": [
+              "admin",
+              "manager",
+              "member"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "userId"
+        ]
+      },
+      "CreateProjectDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "`@Matches` with an anchored pattern. Note the ORDER of decorators does not\nmatter to class-validator (all rules run and all failures are collected),\nbut the order of `@Transform` vs validation DOES: transforms run first.",
+            "minLength": 2,
+            "maxLength": 10,
+            "pattern": "^[A-Z]+$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 120
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "members": {
+            "description": "PHASE 7 REMOVED  FROM THIS DTO.\n\nIt used to be a body field. Now the owner is the AUTHENTICATED CALLER,\nread from the JWT via @CurrentUser(). The rule that motivated the change:\n\n    Identity comes from the token, never from the payload.\n\nAny field that determines ownership or permission and is accepted from a\nrequest body is a privilege-escalation vector - a client could create a\nproject owned by someone else, and once membership drives access, grant\nthemselves a way into another team data.",
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AddProjectMemberDto"
+            }
+          }
+        },
+        "required": [
+          "key",
+          "name"
+        ]
+      },
+      "UpdateProjectDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 120
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        }
+      },
+      "CreateTaskDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 200
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 5000
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "assigneeId": {
+            "type": "string",
+            "nullable": true
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "urgent"
+            ]
+          },
+          "dueDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "`@IsDateString()` validates an ISO-8601 STRING and leaves it a string; the\nservice converts to a `Date`.\n\nWHY NOT `@Type(() => Date)`? Because it accepts anything `new Date()`\naccepts, including `\"yesterday\"` -> `Invalid Date`, which then silently\nwrites `null` or throws deep in the driver. Validating the FORMAT first and\nconverting explicitly afterwards fails loudly at the edge instead."
+          }
+        },
+        "required": [
+          "title",
+          "projectId"
+        ]
+      },
+      "UpdateTaskDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 200
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 5000
+          },
+          "priority": {
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "urgent"
+            ],
+            "type": "string"
+          },
+          "dueDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "`@IsDateString()` validates an ISO-8601 STRING and leaves it a string; the\nservice converts to a `Date`.\n\nWHY NOT `@Type(() => Date)`? Because it accepts anything `new Date()`\naccepts, including `\"yesterday\"` -> `Invalid Date`, which then silently\nwrites `null` or throws deep in the driver. Validating the FORMAT first and\nconverting explicitly afterwards fails loudly at the edge instead."
+          }
+        }
+      },
+      "ChangeTaskStatusDto": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "enum": [
+              "todo",
+              "in_progress",
+              "in_review",
+              "done"
+            ]
+          },
+          "to": {
+            "type": "string",
+            "enum": [
+              "todo",
+              "in_progress",
+              "in_review",
+              "done"
+            ]
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ]
+      },
+      "AssignTaskDto": {
+        "type": "object",
+        "properties": {
+          "assigneeId": {
+            "type": "string",
+            "nullable": true,
+            "description": "`null` unassigns - see the @ValidateIf note above."
+          }
+        },
+        "required": [
+          "assigneeId"
+        ]
+      },
+      "CreateCommentDto": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 5000
+          }
+        },
+        "required": [
+          "body"
+        ]
+      }
+    }
+  }
+}

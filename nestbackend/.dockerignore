@@ -1,0 +1,55 @@
+# =============================================================================
+# .dockerignore - what NEVER enters the build context
+# =============================================================================
+# THIS IS NOT THE SAME FILE AS .gitignore, and the difference matters.
+#
+# Before Docker runs a single instruction it TARS THE ENTIRE DIRECTORY and sends
+# it to the daemon. Without this file that tarball includes node_modules (~400MB)
+# and .git - so every build starts with a multi-second upload of files that are
+# about to be thrown away or, worse, copied in.
+#
+# THE SECURITY HALF, which matters more than the speed half:
+#   - `.env` holds real secrets. `COPY . .` in the build stage would bake them
+#     into a layer. Deleting them in a LATER instruction does NOT remove them -
+#     layers are immutable and anyone with the image can read them with
+#     `docker history` or by extracting the layer tarball. A secret that ever
+#     entered an image is leaked, permanently.
+#   - `.git` contains every past commit, including secrets you already rotated
+#     out of the working tree.
+#
+# THE CORRECTNESS HALF: excluding `node_modules` is what makes the multi-stage
+# build honest. If the host's tree were copied in, a Linux image could end up
+# running native modules compiled for Windows or macOS - and the failure appears
+# at runtime, not at build time.
+# =============================================================================
+
+# Reinstalled inside the image by `npm ci` - and must be, for the target platform
+node_modules
+
+# Rebuilt by `npm run build`. Copying a stale host build is a classic
+# "why is my fix not in the image" bug.
+dist
+coverage
+
+# History, including anything ever committed and later removed
+.git
+.gitignore
+
+# SECRETS. `.env.*` covers .env.local, .env.production and so on.
+.env
+.env.*
+# The template is safe and useful documentation inside the image.
+!.env.example
+
+# Documentation - the docs/ tree here is large and changes constantly, so
+# including it would invalidate the build cache on every prose edit.
+*.md
+!README.md
+
+.vscode
+.idea
+
+# Test setup, fixtures and e2e specs. `tsconfig.build.json` already excludes
+# them from compilation; excluding them from the CONTEXT means editing a test
+# does not invalidate the Docker cache either.
+test

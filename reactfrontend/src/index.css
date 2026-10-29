@@ -1,0 +1,6 @@
+/* MUI CssBaseline handles resets and body styling.
+   This file is for the rare global rule that genuinely has no component owner. */
+
+:root {
+  color-scheme: light;
+}

@@ -1,0 +1,406 @@
+# =============================================================================
+# CI: git push -> install -> lint -> typecheck -> test -> build -> docker
+# =============================================================================
+# THE PRINCIPLE BEHIND THE ORDER: fail on the CHEAPEST check first.
+#
+#   lint       ~15s   catches style and a class of real bugs (floating promises)
+#   typecheck  ~20s   catches everything the compiler can
+#   test       ~100s  catches behaviour
+#   build      ~30s
+#   docker     ~90s
+#
+# Putting the Docker build first would mean waiting two minutes to be told about
+# a missing semicolon. The ordering is not aesthetic - it is the difference
+# between a feedback loop people use and one they route around.
+# =============================================================================
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# CANCEL SUPERSEDED RUNS. Without this, pushing three times to a PR runs three
+# full pipelines and you pay for two results nobody will read.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api-quality:
+    name: API - lint, typecheck, test
+    runs-on: ubuntu-latest
+
+    # THE BACKEND LIVES IN nestbackend/. This makes every `run:` step below
+    # execute there, so package.json, the lockfile and node_modules are all
+    # found without prefixing each command.
+    #
+    # CAVEAT that bites everyone: this applies ONLY to `run:` steps. The
+    # `uses:` steps (setup-node, upload-artifact, build-push-action) resolve
+    # their paths from the REPO ROOT and must spell out nestbackend/ - which
+    # is exactly what the three edits below do.
+    defaults:
+      run:
+        working-directory: nestbackend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          # Caches ~/.npm keyed on the lockfile. Turns a 60s install into ~10s,
+          # and it is one line.
+          cache: npm
+          # setup-node is an ACTION, so it does not inherit defaults.run above.
+          # Without this it looks for a lockfile at the repo root, finds none,
+          # and fails the step outright.
+          cache-dependency-path: nestbackend/package-lock.json
+
+      # `npm ci`, not `npm install` - see the Dockerfile for why. In CI the
+      # difference matters more: `install` can silently resolve a new transitive
+      # version, so a green build says nothing about what you tested.
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Lint
+        run: npm run lint
+
+      # A SEPARATE typecheck step, even though `npm run build` also compiles.
+      #
+      # WHY: `nest build` excludes tests (tsconfig.build.json), so a type error
+      # in a spec file would not fail the build. `tsc --noEmit` checks
+      # EVERYTHING, and it is 20 seconds.
+      - name: Typecheck
+        run: npm run typecheck
+
+      # The unit suite needs no infrastructure and finishes in ~12s. Running it
+      # BEFORE the slow e2e suite means most failures are reported in seconds.
+      - name: Unit tests
+        run: npm run test:unit
+
+      # The e2e suite starts a real mongod via mongodb-memory-server. It needs
+      # no services block: the binary is downloaded and cached by the action's
+      # npm cache, which is one fewer moving part than a service container.
+      - name: Integration and e2e tests
+        run: npm run test:e2e
+
+      - name: Coverage
+        run: npm run test:cov
+
+      # Publishing coverage as an ARTIFACT rather than gating on a percentage.
+      # The threshold check already runs inside `test:cov`; the artifact is for
+      # humans reviewing a PR, and it is what makes a coverage discussion
+      # concrete rather than a number in a comment.
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: nestbackend/coverage/
+          retention-days: 7
+
+  api-build:
+    name: API - build and package
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: nestbackend
+    # Only if quality passed. Building an image from code that does not compile
+    # wastes minutes and, worse, can publish it.
+    needs: api-quality
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          # setup-node is an ACTION, so it does not inherit defaults.run above.
+          # Without this it looks for a lockfile at the repo root, finds none,
+          # and fails the step outright.
+          cache-dependency-path: nestbackend/package-lock.json
+
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+
+      # THE OPENAPI DOCUMENT COMES FROM THE BUILT ARTEFACT.
+      #
+      # The Swagger CLI plugin is a build-time AST transform, so a document
+      # generated from a test run has no DTO properties (Phase 15). Generating
+      # it - and diffing it - is how an unintended breaking API change becomes a
+      # reviewable diff instead of a support ticket.
+      #
+      # THAT IS NOW A REAL JOB rather than a placeholder: see `contract-drift`
+      # below, which boots this build, regenerates the frontend's types from
+      # /api/docs-json, and fails on a non-empty diff.
+      #
+      # NOTE FOR THE RECORD: the placeholder this replaces was INVALID YAML and
+      # would have failed the workflow outright. It read
+      #
+      #     run: echo "In a real pipeline: boot dist/main with ..."
+      #
+      # and a plain scalar cannot contain ": " - YAML reads it as a nested
+      # mapping. Found by running the file through a parser, which is worth
+      # doing to any workflow you cannot execute locally: a broken pipeline
+      # definition fails at the platform, long after you have pushed.
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build the image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./nestbackend
+          # Build only; publishing needs registry credentials and a deliberate
+          # decision about WHEN to publish (usually: tags, not every commit).
+          push: false
+          tags: taskflow-api:${{ github.sha }}
+          # GitHub Actions layer cache. Without it every run rebuilds every
+          # layer, and the multi-stage Dockerfile's careful layer ordering buys
+          # nothing.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ===========================================================================
+  # THE REACT CLIENT
+  # ===========================================================================
+  # A SEPARATE JOB, not extra steps on the API job, and the reason is practical:
+  # GitHub runs jobs in PARALLEL. Backend and frontend have no build-time
+  # dependency on each other, so running them together halves wall-clock time
+  # and - more usefully - a red pipeline says WHICH HALF broke without opening
+  # the log.
+  #
+  # `defaults.run.working-directory` applies to `run:` steps only. The `uses:`
+  # steps resolve paths from the repo root, which is why setup-node and
+  # upload-artifact below spell out `reactfrontend/`.
+  # ===========================================================================
+  web-quality:
+    name: Web - lint, typecheck, test
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: reactfrontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: reactfrontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Lint
+        run: npm run lint
+
+      # A SEPARATE typecheck step even though `npm run build` also runs `tsc -b`.
+      # Same reasoning as the API job: it fails in ~10 seconds with a clear
+      # message, before the slower steps queue behind it.
+      - name: Typecheck
+        run: npm run typecheck
+
+      # Includes the MSW integration suites, which exercise the real transport -
+      # headers, the 401 refresh-and-retry, single-flight. Those are the tests
+      # most likely to catch a regression that unit tests structurally cannot.
+      - name: Tests
+        run: npm run test:cov
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-coverage
+          path: reactfrontend/coverage/
+          retention-days: 7
+
+  # ===========================================================================
+  # API CONTRACT DRIFT - the check named in Phase 7 and never built until now
+  # ===========================================================================
+  # Request types are GENERATED from the backend's OpenAPI document. Generation
+  # only protects you if somebody runs it - and nobody remembers to.
+  #
+  # This job boots the real API, regenerates, and FAILS ON A NON-EMPTY DIFF. So
+  # a backend DTO change that the frontend has not absorbed breaks the build on
+  # the commit that introduced it, rather than surfacing weeks later as a 400
+  # nobody can explain.
+  #
+  # WHAT IT STILL CANNOT CATCH, stated honestly: the document has no RESPONSE
+  # schemas (the controllers return plain TypeScript types, which leave nothing
+  # for the Swagger plugin to read). So this guards what we SEND and not what we
+  # RECEIVE. Closing that gap is a backend change - `@ApiOkResponse({ type })`
+  # on the controllers - and is tracked in ROADMAP.md.
+  # ===========================================================================
+  contract-drift:
+    name: Web - API contract is up to date
+    runs-on: ubuntu-latest
+    needs: api-quality
+
+    # A real MongoDB, because the API refuses to boot without one. Redis is
+    # optional by design (every Redis path degrades rather than fails), so it is
+    # deliberately absent - booting fewer services keeps this job fast.
+    services:
+      mongodb:
+        image: mongo:7
+        ports: ['27017:27017']
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ping:1}).ok'"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: nestbackend/package-lock.json
+
+      - name: Install and build the API
+        working-directory: nestbackend
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
+      - name: Boot the API
+        working-directory: nestbackend
+        env:
+          NODE_ENV: development
+          PORT: 3000
+          # A STANDALONE mongod here, so `directConnection=true` is required -
+          # without it the driver attempts replica-set discovery and hangs.
+          # Transactions are unavailable, which is fine: this job only reads the
+          # OpenAPI document.
+          MONGODB_URI: mongodb://127.0.0.1:27017/taskflow_ci?directConnection=true
+          SWAGGER_ENABLED: 'true'
+          JWT_ACCESS_SECRET: ci-only-access-secret-not-for-real-use-0000000
+          JWT_REFRESH_SECRET: ci-only-refresh-secret-not-for-real-use-000000
+        run: |
+          node dist/main &
+          # POLL for readiness rather than `sleep 20`. A fixed sleep is either
+          # too short (flaky) or too long (slow), and it is wrong on a different
+          # runner size.
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:3000/health/live > /dev/null && break
+            sleep 1
+          done
+          curl -sf http://localhost:3000/health/live
+
+      - name: Regenerate the API types
+        working-directory: reactfrontend
+        run: npm run api:types
+
+      - name: Fail if the generated types are stale
+        working-directory: reactfrontend
+        run: |
+          if ! git diff --quiet -- openapi/openapi.json src/types/openapi.generated.ts; then
+            echo "::error::The API contract changed and the generated types were not updated."
+            echo "Run 'npm run api:types' in reactfrontend/ (with the API running) and commit the result."
+            git diff --stat -- openapi/openapi.json src/types/openapi.generated.ts
+            git diff -- src/types/openapi.generated.ts | head -80
+            exit 1
+          fi
+          echo "Generated types match the running API."
+
+  # ===========================================================================
+  # THE WEB IMAGE
+  # ===========================================================================
+  # Builds the multi-stage nginx image. Note it does NOT need the API job - the
+  # frontend build has no dependency on the backend, only its published
+  # contract, which `contract-drift` checks separately.
+  # ===========================================================================
+  web-build:
+    name: Web - build and package
+    runs-on: ubuntu-latest
+    needs: web-quality
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: reactfrontend/package-lock.json
+
+      - name: Build
+        working-directory: reactfrontend
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
+      # A BUDGET, so a dependency that quietly doubles the bundle fails the
+      # build instead of being noticed six months later.
+      #
+      # 260 kB against a measured 245 kB eager gzip (Phase 16) - enough headroom
+      # for ordinary work, tight enough to catch something structural. The number
+      # is arbitrary; HAVING one is not.
+      - name: Check the bundle budget
+        working-directory: reactfrontend
+        run: |
+          node -e "
+            const fs = require('fs'), zlib = require('zlib'), path = require('path');
+            const html = fs.readFileSync('dist/index.html', 'utf8');
+            const mods = [...html.matchAll(/(?:src|href)=\"([^\"]*\.js)\"/g)].map(m => m[1]);
+            let total = 0;
+            for (const m of mods) total += zlib.gzipSync(fs.readFileSync(path.join('dist', m))).length;
+            const kb = Math.round(total / 1024);
+            console.log('eager JS: ' + kb + ' kB gzip across ' + mods.length + ' files');
+            if (kb > 260) {
+              console.error('::error::Bundle budget exceeded: ' + kb + ' kB > 260 kB');
+              process.exit(1);
+            }
+          "
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build the image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./reactfrontend
+          target: runtime
+          push: false
+          tags: taskflow-web:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+# =============================================================================
+# WHAT A REAL PIPELINE ADDS, and why each is deliberately not here
+# =============================================================================
+#   SECURITY SCANNING     `npm audit --audit-level=high`, Trivy or Grype on the
+#                         image, and secret scanning. Omitted because a noisy
+#                         gate that everyone learns to ignore is worse than
+#                         none - it needs a policy for accepted findings.
+#
+#   PUBLISH               push to GHCR/ECR on a tag. Needs credentials and a
+#                         versioning scheme, both of which are org decisions.
+#
+#   DEPLOY                the interesting part, and the part with the most
+#                         variance:
+#                           - MIGRATIONS run as a separate job BEFORE the new
+#                             version, and must be backward-compatible with the
+#                             OLD one, because both run at once during a rollout.
+#                             That constraint - expand, migrate, contract - is
+#                             the single most important deployment idea here.
+#                           - ROLLING or blue/green, never stop-then-start.
+#                           - HEALTH CHECKS gate the rollout (Phase 18): a pod
+#                             that fails readiness never receives traffic, so a
+#                             broken release stalls instead of serving errors.
+#                           - GRACEFUL SHUTDOWN must actually work, or every
+#                             deploy drops in-flight requests and jobs
+#                             (Phases 1 and 12).
+#                           - ROLLBACK must be one command, and must be
+#                             rehearsed - a rollback plan nobody has run is a
+#                             hope, not a plan.
+#
+#   E2E AGAINST A DEPLOYED ENVIRONMENT   a small smoke suite after deploy. The
+#                         full suite belongs before it.
+# =============================================================================

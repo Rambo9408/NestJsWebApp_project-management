@@ -1,0 +1,85 @@
+{
+  /**
+   * ===========================================================================
+   * TypeScript configuration
+   * ===========================================================================
+   * NestJS is "TypeScript-first". Two compiler options below are not optional
+   * for Nest -- the framework literally cannot work without them:
+   *
+   *   experimentalDecorators  -> enables @Controller(), @Injectable(), @Get()...
+   *   emitDecoratorMetadata   -> makes tsc emit `design:paramtypes` metadata.
+   *
+   * `emitDecoratorMetadata` is THE reason NestJS dependency injection can work
+   * without you writing @Inject() everywhere. When tsc compiles:
+   *
+   *     @Injectable()
+   *     class UsersService { constructor(private repo: UsersRepository) {} }
+   *
+   * it additionally emits:
+   *
+   *     Reflect.metadata("design:paramtypes", [UsersRepository])
+   *
+   * At bootstrap NestJS reads that metadata with `Reflect.getMetadata(...)`,
+   * sees the constructor wants a `UsersRepository`, looks it up in the module's
+   * provider registry and injects it. Turn this flag off and every Nest app
+   * dies with "Nest can't resolve dependencies of ...".
+   *
+   * INTERVIEW: "How does NestJS know what to inject if TypeScript types are
+   * erased at runtime?" -> Types ARE erased, but `emitDecoratorMetadata` writes
+   * the constructor parameter *classes* into a reflect-metadata store, which
+   * survives at runtime. That store is the whole trick.
+   * ===========================================================================
+   */
+  "compilerOptions": {
+    "module": "commonjs",
+    "declaration": true,
+    "removeComments": false,
+
+    // --- The two Nest-critical flags -------------------------------------
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "target": "ES2023",
+    "sourceMap": true,
+    "outDir": "./dist",
+    "baseUrl": "./",
+    "incremental": true,
+    "skipLibCheck": true,
+
+    // --- Strictness -------------------------------------------------------
+    // Requirement #45 of the project brief: TypeScript strict mode.
+    // `strict: true` turns on noImplicitAny, strictNullChecks,
+    // strictFunctionTypes, strictBindCallApply, alwaysStrict, etc.
+    "strict": true,
+
+    // ...with ONE deliberate exception. Classes like DTOs and Mongoose schema
+    // classes declare properties that are assigned by class-transformer or by
+    // Mongoose *after* construction, never in a constructor:
+    //
+    //     export class CreateUserDto { @IsEmail() email: string; }
+    //
+    // With strictPropertyInitialization on, that is a compile error unless we
+    // litter the codebase with `email!: string`. Turning it off is the
+    // standard trade-off in Nest codebases: we lose a small safety net on
+    // class fields, we keep DTOs readable. (Alternative: keep it on and use
+    // definite-assignment `!`. Both are defensible - pick one and be
+    // consistent. We picked this one.)
+    "strictPropertyInitialization": false,
+
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+
+    // Absolute imports: `import { X } from 'src/common/...'` instead of
+    // '../../../common/...'. Keeps module boundaries readable and makes it
+    // obvious when a feature module reaches into another feature module
+    // (a dependency-boundary smell we care about in a modular monolith).
+    "paths": {
+      "src/*": ["src/*"]
+    }
+  },
+  "include": ["src/**/*", "test/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

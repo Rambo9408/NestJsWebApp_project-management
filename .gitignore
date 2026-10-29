@@ -1,0 +1,39 @@
+# dependencies
+# NO LEADING SLASH. A leading / anchors the pattern to the repo root, which
+# stopped matching once the app moved into nestbackend/. Unanchored, these
+# match at any depth - so they cover nestbackend/ and reactfrontend/ alike.
+node_modules/
+
+# build output
+dist/
+build/
+*.tsbuildinfo
+
+# tests
+coverage/
+.nyc_output/
+
+# logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# secrets / environment
+# NOTE: .env.example IS committed (it is documentation).
+# Real .env files are NEVER committed - see README "Security".
+.env
+.env.local
+.env.*.local
+.env.production
+
+# editors / OS
+.idea
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+
+# runtime data
+data/

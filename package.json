@@ -1,0 +1,51 @@
+{
+  "name": "taskflow",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TaskFlow monorepo root - NestJS API in nestbackend/, React SPA in reactfrontend/",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "//": [
+    "DELIBERATELY NOT AN npm WORKSPACE. There is no `workspaces` field here, so",
+    "each app keeps its own package.json, its own lockfile and its own",
+    "node_modules. That costs some disk and dedup, and buys two things that",
+    "matter more for this repo:",
+    "",
+    "  1. The backend Dockerfile keeps working UNCHANGED. Workspaces hoist",
+    "     node_modules and the lockfile to the root, so a build context of",
+    "     ./nestbackend would no longer contain a lockfile and `npm ci` would",
+    "     fail. Un-hoisting that is a real Dockerfile rewrite.",
+    "  2. A React SPA and a Nest API share almost no dependencies, so hoisting",
+    "     dedups very little in practice.",
+    "",
+    "The scripts below are pure convenience wrappers. `npm --prefix <dir> run`",
+    "runs a script as if you had cd'd into that folder, so nothing here needs",
+    "to know anything about either app's internals."
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c blue,magenta \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "npm --prefix nestbackend run start:dev",
+    "dev:web": "npm --prefix reactfrontend run dev",
+    "build": "npm run build:api && npm run build:web",
+    "build:api": "npm --prefix nestbackend run build",
+    "build:web": "npm --prefix reactfrontend run build",
+    "lint": "npm run lint:api && npm run lint:web",
+    "lint:api": "npm --prefix nestbackend run lint",
+    "lint:web": "npm --prefix reactfrontend run lint",
+    "typecheck": "npm run typecheck:api && npm run typecheck:web",
+    "typecheck:api": "npm --prefix nestbackend run typecheck",
+    "typecheck:web": "npm --prefix reactfrontend run typecheck",
+    "test": "npm run test:api && npm run test:web",
+    "test:api": "npm --prefix nestbackend run test:unit",
+    "test:web": "npm --prefix reactfrontend test",
+    "test:e2e": "npm --prefix nestbackend run test:e2e",
+    "install:all": "npm --prefix nestbackend ci && npm --prefix reactfrontend ci",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "infra:logs": "docker compose logs -f"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

@@ -1,0 +1,56 @@
+# =============================================================================
+# .dockerignore — what never enters the build context
+# =============================================================================
+# Before Docker runs a single instruction it TARS THIS DIRECTORY and ships it to
+# the daemon. Without this file that tarball includes node_modules (~300 MB),
+# dist, coverage and the whole git history — so every build begins with a
+# multi-second upload of files that are about to be thrown away or, worse,
+# copied in.
+#
+# THE CORRECTNESS HALF matters more than the speed half: excluding node_modules
+# is what makes the multi-stage build honest. Copy the host's tree in and a
+# Linux image can end up running native modules built for Windows — and the
+# failure appears at runtime, not at build time.
+# =============================================================================
+
+# Reinstalled inside the image by `npm ci`, for the target platform.
+node_modules
+
+# Rebuilt by `npm run build`. Copying a stale host build is the classic
+# "why is my fix not in the image" bug.
+dist
+coverage
+
+# History, including anything ever committed and later removed.
+.git
+.gitignore
+
+# SECRETS. Nothing here is a runtime secret for a static SPA — Vite bakes
+# VITE_* values into the bundle at BUILD time, so they are public by
+# construction. Excluded anyway: a .env.local pointing at a staging API would
+# silently change what the image contains.
+.env
+.env.*
+!.env.example
+
+# Prose. Excluding it means editing a doc does not invalidate the build cache.
+docs
+*.md
+
+# Tooling that plays no part in the build.
+.vscode
+.idea
+eslint.config.js
+.prettierrc
+.prettierignore
+
+# The OpenAPI snapshot is a development artefact — `npm run api:types`
+# regenerates it. The TYPES it produced are in src/ and do ship.
+openapi
+
+# Test files. `tsc -b` excludes them from the build output already; excluding
+# them from the CONTEXT means editing a test does not bust the Docker cache
+# either.
+src/**/*.test.ts
+src/**/*.test.tsx
+src/test

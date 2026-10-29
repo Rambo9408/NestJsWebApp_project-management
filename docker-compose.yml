@@ -1,0 +1,227 @@
+# =============================================================================
+# LOCAL DEVELOPMENT INFRASTRUCTURE
+# =============================================================================
+# Phase 1 ships only the *backing services* (MongoDB + Redis). The NestJS app
+# itself runs on your host (`npm run start:dev`) so you keep fast hot-reload
+# and a debugger that just works.
+#
+# In Phase 17 we add a multi-stage `Dockerfile` and an `api` service here, so
+# the whole stack can run containerised for CI and production parity.
+#
+#   docker compose up -d      # start mongo + redis
+#   docker compose ps         # check health
+#   docker compose down       # stop (keeps volumes)
+#   docker compose down -v    # stop AND delete data
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # MongoDB, configured as a SINGLE-NODE REPLICA SET.
+  #
+  # WHY a replica set for local dev? Two features we need later are only
+  # available on a replica set, never on a standalone mongod:
+  #   1. Multi-document TRANSACTIONS (Phase 5 / brief section 20)
+  #   2. CHANGE STREAMS (an alternative notification transport we discuss in
+  #      the SSE phase)
+  # Running standalone locally and a replica set in production is a classic
+  # "works on my machine" trap - the transaction code compiles fine and then
+  # throws `Transaction numbers are only allowed on a replica set member`
+  # the first time it runs in staging.
+  #
+  # WHY no authentication here? Because enabling auth on a replica set also
+  # requires *internal* member authentication (a shared keyFile), which means
+  # committing a secret to the repo just to run `docker compose up`. Instead
+  # the port is bound to 127.0.0.1 only, so nothing outside this machine can
+  # reach it. PRODUCTION IS DIFFERENT: auth + TLS + least-privilege users +
+  # network policy are mandatory there. See README > Security.
+  # ---------------------------------------------------------------------------
+  mongodb:
+    image: mongo:7
+    container_name: taskflow-mongodb
+    restart: unless-stopped
+    command: ['--replSet', 'rs0', '--bind_ip_all']
+    ports:
+      # 127.0.0.1: prefix = reachable from this machine only, not from the LAN.
+      #
+      # PORT 27018 ON THE HOST, 27017 INSIDE THE CONTAINER.
+      #
+      # WHY NOT 27017:27017 - many machines already run a locally-installed
+      # mongod on 27017. When they do, this container silently fails to start
+      # ("ports are not available") and the backend connects to the LOCAL
+      # standalone instead. Everything appears to work until the first
+      # MULTI-DOCUMENT TRANSACTION, which fails with:
+      #
+      #     Transaction numbers are only allowed on a replica set member
+      #
+      # ...because a standalone mongod is not a replica set. That is precisely
+      # the trap this file warns about further up, and it is worth designing
+      # away rather than documenting.
+      #
+      # Moving the HOST port sidesteps it without asking anyone to stop a
+      # service on their machine. The URI in .env points at 27018 and uses
+      # `directConnection=true`, which stops the driver following the address
+      # the replica set advertises for itself (localhost:27017 - which from the
+      # host would be the OTHER mongod).
+      - '127.0.0.1:27018:27017'
+    volumes:
+      # A named volume: data survives `docker compose down`, unlike the
+      # container's writable layer. `down -v` is what actually deletes it.
+      - mongodb-data:/data/db
+    healthcheck:
+      # This healthcheck does double duty: it reports health AND bootstraps the
+      # replica set on first boot (rs.status() throws until rs.initiate() has
+      # run, so the catch branch initiates it exactly once).
+      #
+      # We advertise `localhost:27017` because in Phase 1 the API runs on the
+      # host. When the API moves into a container (Phase 17) this becomes
+      # `mongodb:27017` - a replica set advertises the addresses its clients
+      # must use, so this value is not cosmetic.
+      test: >
+        mongosh --quiet --eval "
+          try { rs.status().ok }
+          catch (e) { rs.initiate({_id:'rs0',members:[{_id:0,host:'localhost:27017'}]}).ok }
+        "
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+    networks:
+      - taskflow
+
+  # ---------------------------------------------------------------------------
+  # Redis - used by three different subsystems in this project:
+  #   1. Cache-aside caching        (Phase 10)
+  #   2. BullMQ background jobs     (Phase 12)
+  #   3. Pub/Sub fan-out for SSE across multiple API instances (Phase 11)
+  #
+  # They share one server but are kept apart by key prefixes / DB indexes.
+  # In production you would usually split at least the queue Redis from the
+  # cache Redis: a cache can be flushed at will, a queue cannot.
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: taskflow-redis
+    restart: unless-stopped
+    # appendonly yes = AOF persistence. Losing a cache is fine; losing queued
+    # jobs is not, and BullMQ stores jobs in Redis.
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '127.0.0.1:6379:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - taskflow
+
+# =============================================================================
+# PHASE 17: the API itself, containerised
+# =============================================================================
+# Phase 1 ran only the backing services so that hot-reload and the debugger
+# stayed fast. This adds the app, which is what CI and production parity need.
+#
+# Run it with:   docker compose --profile app up -d
+#
+# A PROFILE, so the default `docker compose up -d` still starts only MongoDB and
+# Redis for local development. That keeps the fast path fast and makes the
+# containerised run an explicit choice.
+# =============================================================================
+  api:
+    profiles: ['app']
+    build:
+      # The backend now lives in nestbackend/, so the build context is that
+      # folder - not the repo root. The Dockerfile and .dockerignore moved with
+      # it, and both are read relative to this context.
+      context: ./nestbackend
+      # Stop at the runtime stage. Without this, `docker compose build` builds
+      # every stage and tags the last one - which for a multi-stage file is
+      # usually what you want, but being explicit means a new debugging stage
+      # added later does not silently become the image you ship.
+      target: runtime
+    container_name: taskflow-api
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:3000:3000'
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      # SERVICE NAMES, not localhost. Inside the compose network, `mongodb` and
+      # `redis` resolve through Docker's embedded DNS. Using `localhost` here is
+      # the single most common compose mistake - it points at the CONTAINER
+      # itself, so the connection is refused with a very confusing message.
+      MONGODB_URI: mongodb://mongodb:27017/taskflow?directConnection=true
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      CORS_ORIGINS: http://localhost:5173,http://localhost:4200
+      LOG_LEVEL: info
+      SWAGGER_ENABLED: 'false'
+      # NEVER real secrets in a compose file - it is committed. In production
+      # these come from the orchestrator's secret store (Phase 1). These are
+      # obviously-fake development values.
+      JWT_ACCESS_SECRET: compose-only-access-secret-not-for-real-use-0000
+      JWT_REFRESH_SECRET: compose-only-refresh-secret-not-for-real-use-000
+    depends_on:
+      # `service_healthy`, not just `service_started`. Without it the API starts
+      # before MongoDB is accepting connections, fails its retries and exits -
+      # which looks like an application bug and is a startup-ordering one.
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - taskflow
+
+  # ---------------------------------------------------------------------------
+  # THE REACT CLIENT — nginx serving the built bundle, proxying /api
+  # ---------------------------------------------------------------------------
+  # Same `app` profile as the API, so the default `docker compose up -d` still
+  # starts only MongoDB and Redis for local development. Running the whole stack
+  # containerised stays an explicit choice:
+  #
+  #     docker compose --profile app up -d --build
+  #
+  # THE POINT OF RUNNING IT THIS WAY: this is the only configuration that
+  # exercises the REAL topology — one origin, nginx serving static files and
+  # reverse-proxying /api. The Vite dev proxy imitates it; only this proves it.
+  # The SPA fallback, the cache headers and the SSE buffering rules exist here
+  # and nowhere else, so they are untested until this runs.
+  # ---------------------------------------------------------------------------
+  web:
+    profiles: ['app']
+    build:
+      context: ./reactfrontend
+      target: runtime
+    container_name: taskflow-web
+    restart: unless-stopped
+    ports:
+      # 8080 inside (the container runs nginx as a NON-ROOT user, which cannot
+      # bind privileged ports), published on 8080 so it does not collide with
+      # the Vite dev server on 5173.
+      - '127.0.0.1:8080:8080'
+    depends_on:
+      # `service_started`, NOT `service_healthy` — deliberately different from
+      # the API's dependency on MongoDB.
+      #
+      # nginx serves static files perfectly well while the API is down; only
+      # /api calls fail, and the app already renders an ErrorState for that.
+      # Blocking the whole frontend on the backend's health would turn a
+      # partial outage into a total one, and would mean users cannot even reach
+      # the login page to see what is wrong.
+      api:
+        condition: service_started
+    networks:
+      - taskflow
+
+volumes:
+  mongodb-data:
+  redis-data:
+
+networks:
+  # An explicit user-defined bridge network. Containers on it can reach each
+  # other by SERVICE NAME (`mongodb`, `redis`) via Docker's embedded DNS.
+  # That is how the `api` service will find them in Phase 17.
+  taskflow:
+    driver: bridge

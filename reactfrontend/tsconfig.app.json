@@ -1,0 +1,67 @@
+{
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    "target": "es2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "esnext",
+    "types": ["vite/client"],
+    "allowArbitraryExtensions": true,
+    "skipLibCheck": true,
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "jsx": "react-jsx",
+
+    /* --- STRICT MODE ---------------------------------------------------
+     * The Vite template ships WITHOUT `strict`. That is a real gap, and it
+     * is the first thing to fix in any TypeScript project.
+     *
+     * Without strictNullChecks, `user.name` compiles even when `user` is
+     * `undefined` - which is precisely the bug class a typed frontend
+     * exists to prevent. Our API returns `assigneeId: string | null`, so
+     * every consumer MUST be forced to handle the null branch.
+     *
+     * The NestJS backend already runs `strict: true`. Matching it means one
+     * mental model across the stack, and it means the API contract types we
+     * share are enforced identically on both sides.
+     * ------------------------------------------------------------------ */
+    "strict": true,
+
+    /* Catches `arr[10]` returning T when the array has 3 items. Verbose but
+     * genuinely correct - it is what makes `items[0]` type as `T | undefined`.
+     * INTERVIEW: "what does noUncheckedIndexedAccess do?" is a good signal
+     * question - it separates people who configured TS from people who
+     * inherited a config. */
+    "noUncheckedIndexedAccess": true,
+
+    /* Linting */
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+
+    /* PATH ALIAS. `import { api } from '@/services/api'` instead of
+     * '../../../services/api'. The Angular equivalent is the `@app/*` path
+     * mapping in tsconfig - same idea, same benefit: moving a file no longer
+     * rewrites its imports, and a reach across feature boundaries becomes
+     * visible in review rather than hidden behind `../../..`.
+     *
+     * TWO PLACES must agree: here (so tsc/the editor resolve it) and in
+     * vite.config.ts (so the BUNDLER resolves it). Configuring only one is
+     * the classic "works in the editor, fails at build" trap.
+     *
+     * NOTE: NO `baseUrl`. It is deprecated in TypeScript 6 and stops working
+     * in 7. Since TS 5.0 `paths` entries resolve relative to the tsconfig file
+     * that declares them, so baseUrl is redundant - and most tutorials still
+     * pair the two, which now produces a hard error. */
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["src"]
+}
